@@ -2065,33 +2065,9 @@
     dNextDays.setDate(dNextDays.getDate() + 3);
     const defaultNextDaysStr = getLocalDateString(dNextDays);
 
-    // Initial state data (akan disinkronkan dan dimigrasikan dengan Firestore)
-    let tasks = [
-      { id: '1', title: 'Selesaikan proposal proyek utama', priority: 'Tinggi', dueDate: defaultTomorrowStr, completed: false, createdAt: Date.now() - 3600000 },
-      { id: '2', title: 'Fokus belajar modul 1 sesi Pomodoro', priority: 'Sedang', dueDate: defaultTodayStr, completed: true, createdAt: Date.now() - 7200000 },
-      { id: '3', title: 'Minum 2 liter air dan peregangan', priority: 'Rendah', dueDate: defaultNextDaysStr, completed: false, createdAt: Date.now() - 1800000 }
-    ];
-
-    let journals = [
-      {
-        id: '1',
-        date: new Date().toISOString().split('T')[0],
-        subject: '🔬 Science',
-        mood: '🤩',
-        moodLabel: 'Sangat Paham',
-        content: 'Berhasil memahami konsep Hukum Kekekalan Energi Mekanik dan aplikasinya pada gerak jatuh bebas. Rumus Em = Ek + Ep sudah dipahami dengan baik.',
-        timestamp: Date.now() - 3600000
-      },
-      {
-        id: '2',
-        date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-        subject: '📐 Math',
-        mood: '😊',
-        moodLabel: 'Paham',
-        content: 'Latihan 10 soal turunan fungsi aljabar. Aturan perkalian u.v dan pembagian u/v sudah lancar, tinggal memperbanyak variasi soal pecahan.',
-        timestamp: Date.now() - 86400000
-      }
-    ];
+    // Initial state data (tersinkronisasi penuh dengan Firestore)
+    let tasks = [];
+    let journals = [];
 
     let completedSessions = 1;
 
@@ -2108,94 +2084,41 @@
     const timerDocRef = doc(db, "settings", "timer");
 
     // Sinkronisasi Tasks Real-time
-    onSnapshot(tasksColRef, async (snapshot) => {
-      if (!snapshot.empty) {
-        tasks = snapshot.docs.map(docSnap => {
-          const d = docSnap.data();
-          return {
-            id: docSnap.id,
-            title: d.title || '',
-            priority: d.priority || 'Sedang',
-            dueDate: d.dueDate || '',
-            completed: !!d.completed,
-            createdAt: typeof d.createdAt === 'number' ? d.createdAt : Date.now()
-          };
-        });
-        renderTasks();
-      } else {
-        await seedInitialTasks();
-      }
+    onSnapshot(tasksColRef, (snapshot) => {
+      tasks = snapshot.docs.map(docSnap => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          title: d.title || '',
+          priority: d.priority || 'Sedang',
+          dueDate: d.dueDate || '',
+          completed: !!d.completed,
+          createdAt: typeof d.createdAt === 'number' ? d.createdAt : Date.now()
+        };
+      });
+      renderTasks();
     }, (error) => {
       console.warn('Firestore tasks listener notice:', error);
     });
 
-    async function seedInitialTasks() {
-      let localOld = null;
-      try {
-        localOld = JSON.parse(localStorage.getItem(STORAGE_KEY_TASKS));
-      } catch (e) {}
-
-      const toSeed = (Array.isArray(localOld) && localOld.length > 0) ? localOld : tasks;
-      for (const t of toSeed) {
-        try {
-          await setDoc(doc(db, "tasks", String(t.id)), {
-            title: t.title || '',
-            priority: t.priority || 'Sedang',
-            dueDate: t.dueDate || '',
-            completed: !!t.completed,
-            createdAt: t.createdAt || Date.now()
-          });
-        } catch (err) {
-          console.warn('Gagal migrasi tugas ke Firestore:', err);
-        }
-      }
-    }
-
     // Sinkronisasi Journals Real-time
-    onSnapshot(journalsColRef, async (snapshot) => {
-      if (!snapshot.empty) {
-        journals = snapshot.docs.map(docSnap => {
-          const d = docSnap.data();
-          return {
-            id: docSnap.id,
-            date: d.date || '',
-            subject: d.subject || '📐 Math',
-            mood: d.mood || '🤩',
-            moodLabel: d.moodLabel || 'Paham',
-            content: d.content || '',
-            timestamp: typeof d.timestamp === 'number' ? d.timestamp : Date.now()
-          };
-        });
-        renderJournals();
-      } else {
-        await seedInitialJournals();
-      }
+    onSnapshot(journalsColRef, (snapshot) => {
+      journals = snapshot.docs.map(docSnap => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          date: d.date || '',
+          subject: d.subject || '📐 Math',
+          mood: d.mood || '🤩',
+          moodLabel: d.moodLabel || 'Paham',
+          content: d.content || '',
+          timestamp: typeof d.timestamp === 'number' ? d.timestamp : Date.now()
+        };
+      });
+      renderJournals();
     }, (error) => {
       console.warn('Firestore journals listener notice:', error);
     });
-
-    async function seedInitialJournals() {
-      let localOld = null;
-      try {
-        localOld = JSON.parse(localStorage.getItem(STORAGE_KEY_JOURNAL));
-      } catch (e) {}
-
-      const toSeed = (Array.isArray(localOld) && localOld.length > 0) ? localOld : journals;
-      for (const j of toSeed) {
-        try {
-          await setDoc(doc(db, "journals", String(j.id)), {
-            date: j.date || new Date().toISOString().split('T')[0],
-            subject: j.subject || '📐 Math',
-            mood: j.mood || '🤩',
-            moodLabel: j.moodLabel || 'Paham',
-            content: j.content || '',
-            timestamp: j.timestamp || Date.now()
-          });
-        } catch (err) {
-          console.warn('Gagal migrasi jurnal ke Firestore:', err);
-        }
-      }
-    }
 
     // Sinkronisasi Timer Settings & Sessions
     onSnapshot(timerDocRef, (docSnap) => {
@@ -2606,13 +2529,14 @@
     };
 
     window.deleteTask = async function (id) {
-      tasks = tasks.filter(t => t.id !== id);
+      const targetId = String(id);
+      tasks = tasks.filter(t => String(t.id) !== targetId);
       renderTasks();
       showToast('Tugas telah dihapus.');
 
-      // Hapus data tugas dari Firestore
+      // Hapus data tugas secara permanen dari Firestore
       try {
-        await deleteDoc(doc(db, "tasks", id));
+        await deleteDoc(doc(db, "tasks", targetId));
       } catch (err) {
         console.error('Error menghapus tugas di Firestore:', err);
       }
@@ -3064,7 +2988,7 @@
                 <span class="journal-date-badge">${formattedDate}</span>
                 <span class="journal-mood-tag">${mood} ${escapeHtml(moodLabel)}</span>
               </div>
-              <button class="btn-delete-task" onclick="deleteJournal('${j.id}')" title="Hapus catatan refleksi">
+              <button class="btn-delete-task" onclick="event.stopPropagation(); deleteJournal('${escapeHtml(j.id)}')" title="Hapus catatan refleksi">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="3 6 5 6 21 6"></polyline>
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -3124,19 +3048,18 @@
       });
     }
 
-    // Hapus Catatan Refleksi
+    // Hapus Catatan Refleksi secara permanen
     window.deleteJournal = async function (id) {
-      if (confirm('Hapus catatan refleksi ini?')) {
-        journals = journals.filter(j => j.id !== id);
-        renderJournals();
-        showToast('Catatan refleksi dihapus.');
+      const targetId = String(id);
+      journals = journals.filter(j => String(j.id) !== targetId);
+      renderJournals();
+      showToast('Catatan refleksi dihapus.');
 
-        // Hapus dari Firestore
-        try {
-          await deleteDoc(doc(db, "journals", id));
-        } catch (err) {
-          console.error('Error menghapus jurnal dari Firestore:', err);
-        }
+      // Hapus dari Firestore
+      try {
+        await deleteDoc(doc(db, "journals", targetId));
+      } catch (err) {
+        console.error('Error menghapus jurnal dari Firestore:', err);
       }
     };
 
