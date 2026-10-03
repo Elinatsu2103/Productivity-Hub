@@ -1851,17 +1851,19 @@
                 Mata Pelajaran
               </label>
               <select id="journalSubjectSelect" class="select-input">
-                <option value="🎯 Umum">🎯 Umum</option>
-                <option value="📐 Matematika">📐 Matematika</option>
+                <option value="📐 Math">📐 Math</option>
+                <option value="🌍 Social">🌍 Social</option>
+                <option value="🔬 Science">🔬 Science</option>
+                <option value="🌐 English">🌐 English</option>
+                <option value="💬 BK">💬 BK</option>
+                <option value="💻 ICT">💻 ICT</option>
                 <option value="📖 Bahasa Indonesia">📖 Bahasa Indonesia</option>
-                <option value="🌐 Bahasa Inggris">🌐 Bahasa Inggris</option>
-                <option value="⚡ Fisika">⚡ Fisika</option>
-                <option value="🧪 Kimia">🧪 Kimia</option>
-                <option value="🧬 Biologi">🧬 Biologi</option>
-                <option value="🏛️ Sejarah">🏛️ Sejarah</option>
-                <option value="💻 Pemrograman & IT">💻 Pemrograman & IT</option>
-                <option value="📊 Ekonomi & Bisnis">📊 Ekonomi & Bisnis</option>
-                <option value="🎨 Seni & Desain">🎨 Seni & Desain</option>
+                <option value="⚖️ Civics">⚖️ Civics</option>
+                <option value="🏮 Mandarin">🏮 Mandarin</option>
+                <option value="🙏 Religion">🙏 Religion</option>
+                <option value="💼 Entrepreneurship">💼 Entrepreneurship</option>
+                <option value="🎨 VA">🎨 VA</option>
+                <option value="🎵 Music">🎵 Music</option>
               </select>
             </div>
           </div>
@@ -2074,7 +2076,7 @@
       {
         id: '1',
         date: new Date().toISOString().split('T')[0],
-        subject: '⚡ Fisika',
+        subject: '🔬 Science',
         mood: '🤩',
         moodLabel: 'Sangat Paham',
         content: 'Berhasil memahami konsep Hukum Kekekalan Energi Mekanik dan aplikasinya pada gerak jatuh bebas. Rumus Em = Ek + Ep sudah dipahami dengan baik.',
@@ -2083,7 +2085,7 @@
       {
         id: '2',
         date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-        subject: '📐 Matematika',
+        subject: '📐 Math',
         mood: '😊',
         moodLabel: 'Paham',
         content: 'Latihan 10 soal turunan fungsi aljabar. Aturan perkalian u.v dan pembagian u/v sudah lancar, tinggal memperbanyak variasi soal pecahan.',
@@ -2157,7 +2159,7 @@
           return {
             id: docSnap.id,
             date: d.date || '',
-            subject: d.subject || '🎯 Umum',
+            subject: d.subject || '📐 Math',
             mood: d.mood || '🤩',
             moodLabel: d.moodLabel || 'Paham',
             content: d.content || '',
@@ -2183,7 +2185,7 @@
         try {
           await setDoc(doc(db, "journals", String(j.id)), {
             date: j.date || new Date().toISOString().split('T')[0],
-            subject: j.subject || '🎯 Umum',
+            subject: j.subject || '📐 Math',
             mood: j.mood || '🤩',
             moodLabel: j.moodLabel || 'Paham',
             content: j.content || '',
@@ -3050,7 +3052,7 @@
           year: 'numeric'
         });
 
-        const subject = j.subject || '🎯 Umum';
+        const subject = j.subject || '📐 Math';
         const mood = j.mood || '🤩';
         const moodLabel = j.moodLabel || 'Paham';
 
@@ -3079,7 +3081,7 @@
     if (btnSaveJournal) {
       btnSaveJournal.addEventListener('click', async () => {
         const content = journalContentInput.value.trim();
-        const subject = journalSubjectSelect ? journalSubjectSelect.value : '🎯 Umum';
+        const subject = journalSubjectSelect ? journalSubjectSelect.value : '📐 Math';
         const dateVal = (journalDateInput && journalDateInput.value) ? journalDateInput.value : new Date().toISOString().split('T')[0];
 
         if (!content) {
