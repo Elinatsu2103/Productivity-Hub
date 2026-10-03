@@ -22,6 +22,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
 
+  <!-- Firebase SDK Import Map -->
+  <script type="importmap">
+  {
+    "imports": {
+      "firebase/app": "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js"
+    }
+  }
+  </script>
+
   <style>
     /* Reset & CSS Variables */
     *,
@@ -2000,10 +2010,38 @@
 
   </div>
 
-  <!-- SCRIPT LOGIKA UTAMA APLIKASI -->
-  <script>
+  <!-- SCRIPT LOGIKA UTAMA APLIKASI DENGAN FIREBASE FIRESTORE -->
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "firebase/app";
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+    import { 
+      getFirestore, 
+      collection, 
+      doc, 
+      setDoc, 
+      updateDoc, 
+      deleteDoc, 
+      onSnapshot 
+    } from "firebase/firestore";
+
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyBgOq-GMsLJsgG0anSbFv2BvoLDagtSiOM",
+      authDomain: "productivity-hub-8886a.firebaseapp.com",
+      projectId: "productivity-hub-8886a",
+      storageBucket: "productivity-hub-8886a.firebasestorage.app",
+      messagingSenderId: "486952071368",
+      appId: "1:486952071368:web:a31e942d98fb865a6d35fd"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
     /* =========================================================
-       1. GLOBAL STATE & LOCAL STORAGE INITIALIZATION
+       1. GLOBAL STATE & FIRESTORE SYNCHRONIZATION
        ========================================================= */
     const STORAGE_KEY_TASKS = 'phub_tasks';
     const STORAGE_KEY_JOURNAL = 'phub_journal';
@@ -2025,17 +2063,14 @@
     dNextDays.setDate(dNextDays.getDate() + 3);
     const defaultNextDaysStr = getLocalDateString(dNextDays);
 
-    let tasks = (JSON.parse(localStorage.getItem(STORAGE_KEY_TASKS)) || [
+    // Initial state data (akan disinkronkan dan dimigrasikan dengan Firestore)
+    let tasks = [
       { id: '1', title: 'Selesaikan proposal proyek utama', priority: 'Tinggi', dueDate: defaultTomorrowStr, completed: false, createdAt: Date.now() - 3600000 },
       { id: '2', title: 'Fokus belajar modul 1 sesi Pomodoro', priority: 'Sedang', dueDate: defaultTodayStr, completed: true, createdAt: Date.now() - 7200000 },
       { id: '3', title: 'Minum 2 liter air dan peregangan', priority: 'Rendah', dueDate: defaultNextDaysStr, completed: false, createdAt: Date.now() - 1800000 }
-    ]).map(t => ({
-      ...t,
-      priority: t.priority || 'Sedang',
-      dueDate: t.dueDate || ''
-    }));
+    ];
 
-    let journals = (JSON.parse(localStorage.getItem(STORAGE_KEY_JOURNAL)) || [
+    let journals = [
       {
         id: '1',
         date: new Date().toISOString().split('T')[0],
@@ -2054,18 +2089,151 @@
         content: 'Latihan 10 soal turunan fungsi aljabar. Aturan perkalian u.v dan pembagian u/v sudah lancar, tinggal memperbanyak variasi soal pecahan.',
         timestamp: Date.now() - 86400000
       }
-    ]).map(j => ({
-      ...j,
-      subject: j.subject || '🎯 Umum',
-      date: j.date || new Date(j.timestamp || Date.now()).toISOString().split('T')[0]
-    }));
+    ];
 
-    let completedSessions = parseInt(localStorage.getItem(STORAGE_KEY_SESSIONS), 10) || 1;
+    let completedSessions = 1;
 
     let selectedPriority = 'Sedang';
     let currentTaskFilter = 'all';
     let selectedMood = '🤩';
     let selectedMoodLabel = 'Semangat';
+
+    // ---------------------------------------------------------
+    // FIRESTORE REAL-TIME LISTENERS & PERSISTENCE
+    // ---------------------------------------------------------
+    const tasksColRef = collection(db, "tasks");
+    const journalsColRef = collection(db, "journals");
+    const timerDocRef = doc(db, "settings", "timer");
+
+    // Sinkronisasi Tasks Real-time
+    onSnapshot(tasksColRef, async (snapshot) => {
+      if (!snapshot.empty) {
+        tasks = snapshot.docs.map(docSnap => {
+          const d = docSnap.data();
+          return {
+            id: docSnap.id,
+            title: d.title || '',
+            priority: d.priority || 'Sedang',
+            dueDate: d.dueDate || '',
+            completed: !!d.completed,
+            createdAt: typeof d.createdAt === 'number' ? d.createdAt : Date.now()
+          };
+        });
+        renderTasks();
+      } else {
+        await seedInitialTasks();
+      }
+    }, (error) => {
+      console.warn('Firestore tasks listener notice:', error);
+    });
+
+    async function seedInitialTasks() {
+      let localOld = null;
+      try {
+        localOld = JSON.parse(localStorage.getItem(STORAGE_KEY_TASKS));
+      } catch (e) {}
+
+      const toSeed = (Array.isArray(localOld) && localOld.length > 0) ? localOld : tasks;
+      for (const t of toSeed) {
+        try {
+          await setDoc(doc(db, "tasks", String(t.id)), {
+            title: t.title || '',
+            priority: t.priority || 'Sedang',
+            dueDate: t.dueDate || '',
+            completed: !!t.completed,
+            createdAt: t.createdAt || Date.now()
+          });
+        } catch (err) {
+          console.warn('Gagal migrasi tugas ke Firestore:', err);
+        }
+      }
+    }
+
+    // Sinkronisasi Journals Real-time
+    onSnapshot(journalsColRef, async (snapshot) => {
+      if (!snapshot.empty) {
+        journals = snapshot.docs.map(docSnap => {
+          const d = docSnap.data();
+          return {
+            id: docSnap.id,
+            date: d.date || '',
+            subject: d.subject || '🎯 Umum',
+            mood: d.mood || '🤩',
+            moodLabel: d.moodLabel || 'Paham',
+            content: d.content || '',
+            timestamp: typeof d.timestamp === 'number' ? d.timestamp : Date.now()
+          };
+        });
+        renderJournals();
+      } else {
+        await seedInitialJournals();
+      }
+    }, (error) => {
+      console.warn('Firestore journals listener notice:', error);
+    });
+
+    async function seedInitialJournals() {
+      let localOld = null;
+      try {
+        localOld = JSON.parse(localStorage.getItem(STORAGE_KEY_JOURNAL));
+      } catch (e) {}
+
+      const toSeed = (Array.isArray(localOld) && localOld.length > 0) ? localOld : journals;
+      for (const j of toSeed) {
+        try {
+          await setDoc(doc(db, "journals", String(j.id)), {
+            date: j.date || new Date().toISOString().split('T')[0],
+            subject: j.subject || '🎯 Umum',
+            mood: j.mood || '🤩',
+            moodLabel: j.moodLabel || 'Paham',
+            content: j.content || '',
+            timestamp: j.timestamp || Date.now()
+          });
+        } catch (err) {
+          console.warn('Gagal migrasi jurnal ke Firestore:', err);
+        }
+      }
+    }
+
+    // Sinkronisasi Timer Settings & Sessions
+    onSnapshot(timerDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const d = docSnap.data();
+        if (typeof d.completedSessions === 'number') {
+          completedSessions = d.completedSessions;
+          if (completedSessionsCount) completedSessionsCount.textContent = completedSessions;
+        }
+        if (typeof d.focusMinutes === 'number') {
+          focusMinutes = d.focusMinutes;
+        }
+        if (typeof d.breakMinutes === 'number') {
+          breakMinutes = d.breakMinutes;
+        }
+        updateModeLabels();
+        renderPresetChips();
+        if (!isTimerRunning) {
+          totalSeconds = (currentMode === 'pomodoro' ? focusMinutes : breakMinutes) * 60;
+          remainingSeconds = totalSeconds;
+          updateTimerDisplay();
+        }
+      } else {
+        saveTimerSettings();
+      }
+    }, (error) => {
+      console.warn('Firestore timer settings notice:', error);
+    });
+
+    async function saveTimerSettings() {
+      try {
+        await setDoc(timerDocRef, {
+          completedSessions: completedSessions,
+          focusMinutes: focusMinutes,
+          breakMinutes: breakMinutes
+        }, { merge: true });
+      } catch (err) {
+        console.warn('Gagal menyimpan timer settings ke Firestore:', err);
+      }
+    }
 
     // Toast Utility
     const toast = document.getElementById('appToast');
@@ -2267,7 +2435,6 @@
     }
 
     function saveTasks() {
-      localStorage.setItem(STORAGE_KEY_TASKS, JSON.stringify(tasks));
       renderTasks();
     }
 
@@ -2366,7 +2533,7 @@
       }).join('');
     }
 
-    function addTask() {
+    async function addTask() {
       const title = newTaskInput.value.trim();
       if (!title) {
         showToast('Ketik nama tugas terlebih dahulu!');
@@ -2375,9 +2542,10 @@
       }
 
       const dueDate = newTaskDueDate && newTaskDueDate.value ? newTaskDueDate.value : '';
+      const taskId = Date.now().toString();
 
       const newTask = {
-        id: Date.now().toString(),
+        id: taskId,
         title: title,
         priority: selectedPriority,
         dueDate: dueDate,
@@ -2386,12 +2554,25 @@
       };
 
       tasks.unshift(newTask);
-      saveTasks();
+      renderTasks();
       newTaskInput.value = '';
       if (newTaskDueDate) {
         newTaskDueDate.value = getLocalDateString();
       }
       showToast(`Tugas berhasil ditambahkan! 🚀`);
+
+      // Simpan langsung ke Firebase Firestore
+      try {
+        await setDoc(doc(db, "tasks", taskId), {
+          title: newTask.title,
+          priority: newTask.priority,
+          dueDate: newTask.dueDate,
+          completed: newTask.completed,
+          createdAt: newTask.createdAt
+        });
+      } catch (err) {
+        console.error('Error menyimpan tugas ke Firestore:', err);
+      }
     }
 
     btnAddTask.addEventListener('click', addTask);
@@ -2399,24 +2580,40 @@
       if (e.key === 'Enter') addTask();
     });
 
-    window.toggleTask = function (id) {
+    window.toggleTask = async function (id) {
       const task = tasks.find(t => t.id === id);
       if (task) {
         task.completed = !task.completed;
-        saveTasks();
+        renderTasks();
         if (task.completed) {
           playChime(600, 800);
           showToast('Tugas diselesaikan! Luar biasa! 🎉');
         } else {
           showToast('Tugas ditandai aktif kembali.');
         }
+
+        // Simpan perubahan status ke Firestore
+        try {
+          await updateDoc(doc(db, "tasks", id), {
+            completed: task.completed
+          });
+        } catch (err) {
+          console.error('Error mengupdate tugas di Firestore:', err);
+        }
       }
     };
 
-    window.deleteTask = function (id) {
+    window.deleteTask = async function (id) {
       tasks = tasks.filter(t => t.id !== id);
-      saveTasks();
+      renderTasks();
       showToast('Tugas telah dihapus.');
+
+      // Hapus data tugas dari Firestore
+      try {
+        await deleteDoc(doc(db, "tasks", id));
+      } catch (err) {
+        console.error('Error menghapus tugas di Firestore:', err);
+      }
     };
 
     /* =========================================================
@@ -2447,9 +2644,9 @@
     const btnGoToJournal = document.getElementById('btnGoToJournal');
     const btnCloseReflectionModal = document.getElementById('btnCloseReflectionModal');
 
-    // Durasi Fleksibel (disimpan di state & localStorage)
-    let focusMinutes = parseInt(localStorage.getItem('phub_focus_minutes'), 10) || 25;
-    let breakMinutes = parseInt(localStorage.getItem('phub_break_minutes'), 10) || 5;
+    // Durasi Fleksibel (disimpan di state & Firestore)
+    let focusMinutes = 25;
+    let breakMinutes = 5;
 
     let timerInterval = null;
     let currentMode = 'pomodoro'; // 'pomodoro' | 'shortBreak'
@@ -2497,16 +2694,15 @@
 
       if (currentMode === 'pomodoro') {
         focusMinutes = newMins;
-        localStorage.setItem('phub_focus_minutes', focusMinutes);
       } else {
         breakMinutes = newMins;
-        localStorage.setItem('phub_break_minutes', breakMinutes);
       }
 
       totalSeconds = newMins * 60;
       updateModeLabels();
       renderPresetChips();
       resetTimer();
+      saveTimerSettings();
     }
 
     // Event listener untuk preset chips
@@ -2648,8 +2844,8 @@
 
       if (currentMode === 'pomodoro') {
         completedSessions++;
-        localStorage.setItem(STORAGE_KEY_SESSIONS, completedSessions);
         completedSessionsCount.textContent = completedSessions;
+        saveTimerSettings();
 
         // Buka Popup Modal Ajakan Refleksi
         if (reflectionModal) {
@@ -2814,7 +3010,6 @@
     });
 
     function saveJournals() {
-      localStorage.setItem(STORAGE_KEY_JOURNAL, JSON.stringify(journals));
       renderJournals();
     }
 
@@ -2882,7 +3077,7 @@
 
     // Tombol Simpan Catatan Refleksi
     if (btnSaveJournal) {
-      btnSaveJournal.addEventListener('click', () => {
+      btnSaveJournal.addEventListener('click', async () => {
         const content = journalContentInput.value.trim();
         const subject = journalSubjectSelect ? journalSubjectSelect.value : '🎯 Umum';
         const dateVal = (journalDateInput && journalDateInput.value) ? journalDateInput.value : new Date().toISOString().split('T')[0];
@@ -2893,8 +3088,9 @@
           return;
         }
 
+        const journalId = Date.now().toString();
         const newEntry = {
-          id: Date.now().toString(),
+          id: journalId,
           date: dateVal,
           subject: subject,
           mood: selectedMood,
@@ -2904,20 +3100,41 @@
         };
 
         journals.unshift(newEntry);
-        saveJournals();
+        renderJournals();
 
         journalContentInput.value = '';
         setTodayDate();
         showToast('Catatan refleksi berhasil disimpan! 📖');
+
+        // Simpan langsung ke Firestore
+        try {
+          await setDoc(doc(db, "journals", journalId), {
+            date: newEntry.date,
+            subject: newEntry.subject,
+            mood: newEntry.mood,
+            moodLabel: newEntry.moodLabel,
+            content: newEntry.content,
+            timestamp: newEntry.timestamp
+          });
+        } catch (err) {
+          console.error('Error menyimpan jurnal ke Firestore:', err);
+        }
       });
     }
 
     // Hapus Catatan Refleksi
-    window.deleteJournal = function (id) {
+    window.deleteJournal = async function (id) {
       if (confirm('Hapus catatan refleksi ini?')) {
         journals = journals.filter(j => j.id !== id);
-        saveJournals();
+        renderJournals();
         showToast('Catatan refleksi dihapus.');
+
+        // Hapus dari Firestore
+        try {
+          await deleteDoc(doc(db, "journals", id));
+        } catch (err) {
+          console.error('Error menghapus jurnal dari Firestore:', err);
+        }
       }
     };
 
